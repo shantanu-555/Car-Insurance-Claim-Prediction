@@ -1,0 +1,667 @@
+---
+title: "<center> Advanced Analytics and Machine Learning for Car Insurance Claim Prediction <center>"
+author: '<center> Shantanu Motiani <center>'
+date: '<center> `r Sys.Date()` <center>'
+output:
+  html_document:
+    number_sections: true
+    fig_caption: true
+    toc: true
+    fig_width: 7
+    fig_height: 5
+    theme: cosmo
+    highlight: tango
+    code_folding: show
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk $ set( echo = TRUE, message = FALSE, warning = FALSE, 
+                         comment = " ", error = FALSE, fig.align = 'center' )
+```
+
+```{r message = FALSE, warning = FALSE}
+library( ggplot2 )       # For the ggplot function
+library( plyr )          # For the 'mutate' function
+library( forcats )       # For the "fct_collapse" function
+library( Hmisc )         # For missing values
+library( naniar)         # For visualizing missing values
+library( rpart )         # For the "CART" algorithm
+library( rpart.plot )    # To plot decision trees
+library( C50 )           # For the "C5.0" algorithm
+library( randomForest )  # For the "Random Forest" algorithm
+library( liver )         # For the "adult" dataset & the "partition" function
+library( pROC )          # For ROC plot using "plot.roc" function
+library( ggplot2 )       # For ggroc plot
+library( Boruta )        # For feature importance
+library( psych )         # For correlation plot
+library( dplyr )
+```
+
+# Introduction
+
+Car insurance is a type of financial protection designed to cover the costs associated with accidents, theft, and other unforeseen events involving a motor vehicle. It is a contract between an individual (the policyholder) and an insurance company. In exchange for regular premium payments, the insurance company agrees to provide financial assistance in case of covered events.
+
+Insurance companies conduct risk assessments to determine the likelihood of a policyholder making a claim and the potential cost of that claim. This process is crucial for several reasons:
+
+1.  Setting Premiums: Risk assessment allows insurance companies to determine appropriate premium rates for policies. Policies for individuals or entities with a higher likelihood of making claims or incurring costly losses are generally charged higher premiums. This ensures that the premiums collected are sufficient to cover potential payouts.
+
+2.  Maintaining Financial Stability: Accurately assessing risk helps insurance companies maintain their financial stability. If premiums are too low relative to the risk, the company may not have enough funds to cover claims, potentially leading to financial instability.
+
+3.  Avoiding Adverse Selection: Adverse selection occurs when individuals or businesses with a higher likelihood of making a claim are more inclined to purchase insurance. If insurers do not assess risk properly, they may attract a disproportionate number of high-risk policyholders, which can lead to financial losses.
+
+4.  Balancing Coverage and Costs: Insurance companies need to strike a balance between offering comprehensive coverage and maintaining affordability for policyholders. Risk assessment helps them determine the level of coverage they can provide while still remaining financially viable.
+
+In summary, risk assessment is a cornerstone of the insurance industry's profitability. It helps insurers strike a balance between offering coverage, managing costs, and mitigating financial risks, ultimately allowing them to generate profits while fulfilling their promise to policyholders.
+
+# Business Understanding
+
+The goal of this project is to predict the probability that an individual seeking auto insurance will be in an accident and then to forecast the potential cost of an ensuing claim. Using data of existing customers, we can identify the likely characteristics of high risk drivers. Not only will this allow us to flag high risk clients, it will also allow us to construct a general profile of such drivers.
+
+Following our analyses, insurance providers can accordingly allocate (or deny) a suitable insurance policy to such clients. They can also identify potentially fraudulent claims from clients that were highly unlikely to make claims. However, these problems are not within the scope of this project.
+
+A binary classification model will be constructed to estimate the probability of claiming insurance (1 or 0), this can be done by training and comparing different models like logistic regression, decision trees, and k-nearest neighbors. This approach builds on methods for model training/testing which underlie modern machine learning strategies for classification and prediction.
+
+# Data Understanding
+
+This dataset was obtained from <https://www.kaggle.com/datasets/sagnik1511/car-insurance-data>
+
+```{r}
+
+insurance = read.csv("Car_Insurance_Claim.csv")
+head(insurance)
+```
+
+```{r}
+
+nrow(insurance)
+```
+
+As we can see, the dataset has 10000 rows
+
+```{r}
+
+ncol(insurance)
+```
+
+...and 19 columns.
+
+Let's look at an overview of the dataset
+
+```{r}
+
+str(insurance)
+```
+
+| Variable            | Type                   | Description                                    |
+|------------------|------------------|-----------------------------------|
+| ID                  | Categorical (nominal)  | ID of the client                               |
+| AGE                 | Categorical (ordinal)  | Age range                                      |
+| GENDER              | Categorical (binary)   | Male or Female                                 |
+| RACE                | Categorical (binary)   | Majority or Minority                           |
+| DRIVING_EXPERIENCE  | Categorical (ordinal)  | Duration ranges                                |
+| EDUCATION           | Categorical (ordinal)  | Education Level                                |
+| INCOME              | Categorical (ordinal)  | Income Levels                                  |
+| CREDIT_SCORE        | Numerical (continuous) | Number between 0-1                             |
+| VEHICLE_OWNERSHIP   | Categorical (binary)   | 0 or 1, indicating ownership                   |
+| VEHICLE_YEAR        | Categorical (binary)   | Before or after 2015                           |
+| MARRIED             | Categorical (binary)   | 0 or 1, indicating marital status              |
+| CHILDREN            | Categorical (binary)   | 0 or 1, indicating parental status             |
+| POSTAL_CODE         | Numerical (continuous) | Number indicating postal code                  |
+| ANNUAL_MILEAGE      | Numerical (continuous) | Number indicating annual mileage               |
+| VEHICLE_TYPE        | Categorical (binary)   | Sedan or sports car                            |
+| SPEEDING_VIOLATIONS | Numerical (discrete)   | Indicating the number of speeding violations   |
+| DUIS                | Numerical (discrete)   | Indicating the number of DUIs                  |
+| PAST_ACCIDENTS      | Numerical (discrete)   | Indicating the number of past accidents        |
+| OUTCOME             | Numerical (binary).    | 0 or 1, Indicating if a claim was filed or not |
+
+Let's look at a summary of the dataset:
+
+```{r}
+
+summary(insurance)
+```
+
+It is observed that both the variables CREDIT_SCORE and ANNUAL_MILEAGE have missing values. In order to utilize this data, we will replace the missing values with the mean value of the respective variables.
+
+```{r}
+
+sum(is.na(insurance))
+```
+
+```{r}
+
+insurance $ CREDIT_SCORE = impute( insurance $ CREDIT_SCORE, mean )
+summary(insurance $ CREDIT_SCORE)
+```
+
+```{r}
+
+insurance $ ANNUAL_MILEAGE = impute( insurance $ ANNUAL_MILEAGE, mean )
+summary(insurance $ ANNUAL_MILEAGE)
+```
+
+```{r}
+
+sum(is.na(insurance))
+```
+
+```{r}
+
+summary(insurance)
+```
+
+Let's summarize the target variable `OUTCOME`
+
+```{r}
+
+table(insurance$OUTCOME)
+```
+
+```{r}
+
+round(3133/(3133+6867), 2)
+```
+
+Therefore, 31% of customers in the dataset claimed insurance.
+
+# Exploratory Data Analysis
+
+The goal of this section is to identify the characteristics of customers that claim insurance through plotting, charting and data representation.
+
+## Correlation plots of numerical variables
+
+```{r}
+nums = select_if(insurance, is.numeric)
+pairs.panels( nums )
+```
+
+As we can see, we have no highly directly or inversely proportional numerical columns. Therefore, for now, we will consider all of them (except `ID)` for our EDA.
+
+## Investigating the target variable *OUTCOME*
+
+Here we report a bar plot and summary for the target variable `OUTCOME` as follows:
+
+```{r}
+
+ggplot( data = insurance, aes( x = OUTCOME, label = scales::percent( prop.table( stat( count ) ) ) ) ) +
+    geom_bar( fill = c( "palevioletred1", "darkseagreen1" ) ) + 
+    geom_text( stat = 'count', vjust = 0.2, size = 4 ) + 
+    theme_minimal()
+```
+
+Therefore, 31% of customers in the dataset claimed insurance.
+
+## Investigating *Age*
+
+```{r}
+
+ggplot(data = insurance) +
+  geom_bar(aes(x = AGE, fill = factor(OUTCOME)), position = "fill") +
+  scale_fill_manual(values = c("palevioletred1", "darkseagreen1")) +
+  theme_minimal()
+```
+
+The graphic presented above illustrates a positive correlation between age range and the proportion of insurance claims filed, indicating that younger individuals tend to file a higher proportion of insurance claims.
+
+## Investigating *Gender*
+
+```{r}
+
+ggplot(data = insurance) +
+  geom_bar(aes(x = GENDER, fill = factor(OUTCOME)), position = "fill") +
+  scale_fill_manual(values = c("palevioletred1", "darkseagreen1")) +
+  theme_minimal()
+```
+
+The graphic presented above illustrates a somewhat higher frequency of insurance claims being filed by male drivers.
+
+The above plot does not indicate a clear graphical evidence of the predictive importance of *Gender*. Thus, we apply the following hypothesis testing for dependency between variables *Gender* and *Outcome*
+
+```{r}
+chisq.test( table( insurance $ OUTCOME, insurance $ GENDER ) )
+```
+
+Since the *p*-value \< 2.2e-16 is less than the significance level of $\alpha=0.05$, the null hypothesis is rejected. This implies that the proportion of insurance claims differs between the two groups, and that the variable `Gender` is useful for predicting the proportion of insurance claims filed.
+
+## Investigating *Race*
+
+```{r}
+
+ggplot(data = insurance) +
+  geom_bar(aes(x = RACE, fill = factor(OUTCOME)), position = "fill") +
+  scale_fill_manual(values = c("palevioletred1", "darkseagreen1")) +
+  theme_minimal()
+```
+
+Based on the data depicted in the above bar graph, it is apparent that there is no statistically significant discrepancy in the occurrence of insurance claims among various racial groupings. Therefore, in order to determine the presence of a statistically significant difference, a Chi-squared Test is employed.
+
+```{r}
+
+chisq.test(table(insurance $ OUTCOME, insurance $ RACE))
+```
+
+The resulting p-value of 0.4284 indicates that there is no significant difference.
+
+## Investigating *Driving Experience*
+
+```{r}
+
+ggplot(data = insurance) +
+  geom_bar(aes(x = DRIVING_EXPERIENCE, fill = factor(OUTCOME)), position = "fill") +
+  scale_fill_manual(values = c("palevioletred1", "darkseagreen1")) +
+  theme_minimal()
+```
+
+The graphic presented above demonstrates a notable correlation between driving experience and the likelihood of a client filing an insurance claim. A correlation has been seen between less driving experience and a notable increase in the frequency of insurance claims.
+
+## Investigating *Education*
+
+```{r}
+
+ggplot(data = insurance) +
+  geom_bar(aes(x = EDUCATION, fill = factor(OUTCOME)), position = "fill") +
+  scale_fill_manual(values = c("palevioletred1", "darkseagreen1")) +
+  theme_minimal()
+```
+
+The graphic presented above illustrates the potential relationship between education and the predictor variable of insurance claim. Individuals who have obtained a university degree exhibit a lower proportion of claims in comparison to those with a high school education, who in turn demonstrate a larger percentage of claims. Moreover, individuals with no formal education have the highest percentage of claims.
+
+## Investigating *Income*
+
+```{r}
+
+ggplot(data = insurance) +
+  geom_bar(aes(x = INCOME, fill = factor(OUTCOME)), position = "fill") +
+  scale_fill_manual(values = c("palevioletred1", "darkseagreen1")) +
+  theme_minimal()
+```
+
+The figure presented above demonstrates that income class can serve as a determining factor in predicting the likelihood of an insurance claim. Individuals classified as being in the poverty class exhibit the highest proportion, followed by those in the working class, then in the middle class, and lastly, individuals in the upper class. There exists a substantial disparity, as individuals belonging to the upper economic class exhibit a prevalence rate of roughly 13%, whilst individuals in the poverty class have a rate of 63%.
+
+## Investigating *Credit Score*
+
+To investigate the relationship between variable "CREDIT_SCORE", since the variable "CREDIT_SCORE" is numerical, we report the bar plot with density as follows:
+
+```{r}
+
+insurance$CREDIT_SCORE <- as.numeric(insurance$CREDIT_SCORE)
+
+breaks <- seq(0, 1, by = 0.05)
+
+insurance$credit_bin <- cut(insurance$CREDIT_SCORE, breaks)
+
+ggplot(data = insurance) +
+  geom_bar(aes(x = credit_bin, fill = factor(OUTCOME)), position = "fill") +
+  scale_fill_manual(values = c("palevioletred1", "darkseagreen1")) +
+  scale_x_discrete(labels = as.character(breaks)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+
+ggplot(insurance, aes(x = CREDIT_SCORE, fill = factor(OUTCOME))) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("0" = "palevioletred1", "1" = "darkseagreen1"))+
+  xlab("CREDIT_SCORE")
+```
+
+The presented graphs demonstrate a positive correlation between lower credit scores and an increased proportion of insurance claims.
+
+## Investigating *Vehicle Ownership*
+
+```{r}
+
+ggplot(data = insurance) +
+  geom_bar(aes(x = VEHICLE_OWNERSHIP, fill = factor(OUTCOME)), position = "fill") +
+  scale_fill_manual(values = c("palevioletred1", "darkseagreen1")) +
+  theme_minimal()
+```
+
+The data depicted in the plot indicates that those who do not possess a car exhibit a greater proportion of claiming insurance.
+
+## Investigating *Vehicle Year*
+
+```{r}
+
+ggplot(data = insurance) +
+  geom_bar(aes(x = VEHICLE_YEAR, fill = factor(OUTCOME)), position = "fill") +
+  scale_fill_manual(values = c("palevioletred1", "darkseagreen1")) +
+  theme_minimal()
+```
+
+The data presented in the plot indicates that individuals who possess a car manufactured prior to 2015 have a greater proportion of insurance claims.
+
+## Investigating *Marriage Status*
+
+```{r}
+
+ggplot(data = insurance) +
+  geom_bar(aes(x = MARRIED, fill = factor(OUTCOME)), position = "fill") +
+  scale_fill_manual(values = c("palevioletred1", "darkseagreen1")) +
+  theme_minimal()
+```
+
+The data presented in the plot indicates that individuals who are not married exhibit a greater proportion of insurance claims.
+
+## Investigating *Parenthood*
+
+```{r}
+
+ggplot(data = insurance) +
+  geom_bar(aes(x = CHILDREN, fill = factor(OUTCOME)), position = "fill") +
+  scale_fill_manual(values = c("palevioletred1", "darkseagreen1")) +
+  theme_minimal()
+```
+
+The graphic presented above illustrates a somewhat higher frequency of insurance claims being filed by drivers with no children.
+
+The above plot does not indicate a very clear graphical evidence of the predictive importance of *Children*. Thus, we apply the following hypothesis testing for dependency between variables *Children* and *Outcome*
+
+```{r}
+chisq.test( table( insurance $ OUTCOME, insurance $ CHILDREN ) )
+```
+
+Since the *p*-value \< 2.2e-16 is less than the significance level of $\alpha=0.05$, the null hypothesis is rejected. This implies that the proportion of insurance claims differs between the two groups, and that the variable `Children` is useful for predicting the proportion of insurance claims filed.
+
+## Investigating *Postal Code*
+
+```{r}
+insurance$POSTAL_CODE <- factor(insurance$POSTAL_CODE)
+
+ggplot(data = insurance) +
+  geom_bar(aes(x = POSTAL_CODE, fill = factor(OUTCOME)), position = "fill") +
+  scale_fill_manual(values = c("palevioletred1", "darkseagreen1")) +
+  scale_x_discrete(labels = as.character(breaks)) +
+  theme_minimal()
+```
+
+The plot illustrates that three postal codes exhibit comparable proportions of insurance claims, while one postal code stands out with a 100% rate of insurance claims. Further investigation is necessary before drawing any definitive conclusions.
+
+## Investigating *Annual Mileage*
+
+```{r}
+ggplot(data = insurance) +
+  geom_bar(aes(x = ANNUAL_MILEAGE, fill = factor(OUTCOME)), position = "fill") +
+  scale_fill_manual(values = c("palevioletred1", "darkseagreen1"))+
+  scale_x_discrete(labels = as.character(breaks)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  
+```
+
+The graphic presented above illustrates a normal distribution pattern observed in the proportion of insurance claims. The rationale for this phenomenon may be attributed to the tendency of individuals who drive infrequently to exercise greater caution or encounter fewer hazardous circumstances, whereas those who drive frequently tend to possess more experience and familiarity with complex driving scenarios.
+
+## Investigating *Vehicle Type*
+
+```{r}
+ggplot(data = insurance) +
+  geom_bar(aes(x = VEHICLE_TYPE, fill = factor(OUTCOME)), position = "fill") +
+  scale_fill_manual(values = c("palevioletred1", "darkseagreen1")) +
+  theme_minimal()
+```
+
+The graphic presented above indicates that there is no statistically significant variation in the proportion of insurance claims based on the kind of vehicle.
+
+The above plot does not indicate a clear graphical evidence of the predictive importance of *Vehicle_type*. Thus, we apply the following hypothesis testing for dependency between variables *Vehicle_type* and *Outcome*
+
+```{r}
+chisq.test( table( insurance $ OUTCOME, insurance $ VEHICLE_TYPE ) )
+```
+
+Since the *p*-value = 0.609 is more than the significance level of $\alpha=0.05$, the null hypothesis is not rejected. This implies that the proportion of insurance claims does not differ between the two groups, and that the variable `Vehicle_type` is not useful for predicting the proportion of insurance claims filed.
+
+## Investigating *Speeding Violations*
+
+```{r}
+
+ggplot(data = insurance) +
+  geom_bar(aes(x = SPEEDING_VIOLATIONS, fill = factor(OUTCOME)), position = "fill") + 
+  scale_fill_manual(values = c("palevioletred1", "darkseagreen1")) +
+  theme_minimal()
+```
+
+The provided plot demonstrates that drivers who have not committed any speeding violations exhibit a significantly greater proportion of insurance claims, which can be attributed to their lack of expertise, as shown in other variables. Furthermore, there is no perceptible change in the graphical representation between 1 until 11 instances of speeding offences. Drivers with a higher number of incidents have a significantly lower proportion of insurance claims (graphically non-visible), indicating that they likely have more driving expertise and have been driving for a longer period of time. However, it is necessary to subject these assumptions of experience to further testing.
+
+## Investigating *DUIs*
+
+```{r}
+
+ggplot(data = insurance) +
+  geom_bar(aes(x = DUIS, fill = factor(OUTCOME)), position = "fill") +
+  scale_fill_manual(values = c("palevioletred1", "darkseagreen1")) +
+  theme_minimal()
+```
+
+It is evident that individuals with either no DUIs or four DUIs exhibit a proportionately higher rate of insurance claims, exceeding double the rate observed among individuals with other numbers of DUIs. The high proportion of insurance claims for drivers with absence of driving under the influence (DUI) incidents may be attributed to the prevalence of inexperienced drivers.
+
+## Investigating *Past Accidents*
+
+```{r}
+
+ggplot(data = insurance) +
+  geom_bar(aes(x = PAST_ACCIDENTS, fill = factor(OUTCOME)), position = "fill") +
+  scale_fill_manual(values = c("palevioletred1", "darkseagreen1")) +
+  theme_minimal()
+```
+
+Based on the depicted plot, it is evident that there exists an inverse relationship between the frequency of accidents and the corresponding rate of insurance claims. This observation may be attributed to the notion that increased experience tends to result in a decreased likelihood of accidents occurring.
+
+## Inference
+
+The overarching conclusion of this initial analysis is that there is an inverse relationship between driving experience and the frequency of accidents, resulting in a lower proportion of insurance claims. This can be seen from the results from of following variables: `age`, `driving experience`, `married`, `children`, `speeding violations` and `past accidents`. Moreover, male drivers and lower income and education classes have higher proportion of accidents. As well as the fact if the vehicle is owned by the driver and if it's older than 2015 play a role in determining the proportion of insurance claim.
+
+# Feature Importance
+
+Selecting the most important predictor variables that explains the major part of variance of the response variable can be key to identify and build high performing models. We have gotten a gist of the data and how the predictor variables behave in regard to the target variable from the EDA. However, it is important to algorithmically justify feature extraction before moving on to training models.
+
+```{r}
+
+boruta_output <- Boruta(OUTCOME ~ ., data=na.omit(insurance), doTrace=0)
+
+# Get significant variables
+boruta_signif = getSelectedAttributes(boruta_output, withTentative = FALSE)
+print(boruta_signif)
+```
+
+This confirms our inference from EDA that all variables except `VEHICLE_TYPE` and `RACE` have some significant effect on `OUTCOME`. Therefore, we will proceed with the modelling phase using these variables.
+
+# Data Preparation
+
+## Convert target variable to factor
+
+```{r}
+str(insurance)
+```
+
+```{r}
+insurance $ OUTCOME = factor(ifelse(insurance $ OUTCOME == 0,"No","Yes"))
+head(insurance $ OUTCOME)
+```
+
+## Train-Test split
+
+Let's split the data into train and test data with a 80/20 split.
+
+```{r}
+set.seed( 42 )
+data_sets = partition( data = insurance, prob = c( 0.8, 0.2 ) )
+```
+
+```{r}
+train_set = data_sets $ part1
+test_set  = data_sets $ part2
+
+actual_test  = test_set $ OUTCOME
+```
+
+## Validating the train-test split
+
+```{r}
+x1 = sum( train_set $ OUTCOME == "Yes" )
+x2 = sum( test_set  $ OUTCOME == "Yes" )
+
+n1 = nrow( train_set )
+n2 = nrow( test_set  )
+```
+
+$$ \bigg\{ \begin{matrix}     H_0: x_1/n_1  =  x_2/n_2   \\     H_a: x_1/n_1 \neq x_2/n_2  \end{matrix} $$
+
+```{r}
+prop.test( x = c( x1, x2 ), n = c( n1, n2 ) )
+```
+
+Since the p-value = 1 is greater than alpha = 0.05, at 95% confidence level we do not reject the null hypothesis. Therefore, the division of the target variables in the training and test sets is acceptable.
+
+```{r}
+
+formula = OUTCOME ~ AGE + GENDER + DRIVING_EXPERIENCE + EDUCATION + INCOME + CREDIT_SCORE + VEHICLE_OWNERSHIP + VEHICLE_YEAR + MARRIED + CHILDREN + POSTAL_CODE + ANNUAL_MILEAGE + SPEEDING_VIOLATIONS + DUIS + PAST_ACCIDENTS
+```
+
+# Modelling: Classification
+
+## kNN Algorithm
+
+### Finding optimal k
+
+```{r}
+kNN.plot( formula = formula, train = train_set, test = test_set, transform = "minmax", k.max = 30, set.seed = 42 )
+```
+
+Since k = 28 has the lowest error rate, we choose that as the optimal parameter for our kNN model.
+
+### Training the model
+
+```{r}
+predict_knn = kNN( formula = formula, train = train_set, test = test_set, transform = "minmax", k = 28 )
+```
+
+## CART Algorithm
+
+```{r}
+tree_cart = rpart( formula = formula, data = train_set, method = "class" )
+
+print( tree_cart )
+```
+
+```{r}
+rpart.plot( tree_cart )
+```
+
+## Random Forest
+
+```{r}
+random_forest = randomForest( formula = formula, data = train_set, ntree = 100 )
+plot (random_forest)
+```
+
+```{r}
+varImpPlot( random_forest )
+```
+
+## Logistic Regression
+
+```{r}
+logreg = glm( formula, data = train_set, family = binomial )
+```
+
+```{r}
+summary( logreg )
+```
+
+As we can see from the above summary of logistic regression, we should remove `AGE`, `EDUCATION`, `INCOME`, `CREDIT_SCORE`, `CHILDREN`, `SPEEDING_VIOLATIONS`, `DUIS` and `PAST_ACCIDENTS` since they have a p-value higher than alpha = 0.05, therefore they are not informative enough for our target variable.
+
+```{r}
+formula_logreg = OUTCOME ~ GENDER + DRIVING_EXPERIENCE + VEHICLE_OWNERSHIP + VEHICLE_YEAR + MARRIED + POSTAL_CODE + ANNUAL_MILEAGE 
+```
+
+```{r}
+logreg_2 = glm( formula_logreg, data = train_set, family = binomial )
+```
+
+```{r}
+summary(logreg_2)
+```
+
+As we can see, the updated model has a lower AIC which indicates a better fit.
+
+# Model Evaluation
+
+## Evaluating CART
+
+```{r}
+tree_cart = rpart( formula = formula, data = train_set, method = "class" )
+predict_cart = predict( tree_cart, test_set, type = "class" )
+
+conf.mat( predict_cart, actual_test )  
+conf.mat.plot( predict_cart, actual_test )  
+
+( mse_cart = mse( predict_cart, actual_test ) )
+```
+
+## Evaluating Random Forest
+
+```{r}
+
+random_forest = randomForest( formula = formula, data = train_set, ntree = 100 ) 
+predict_random_forest = predict( random_forest, test_set )    
+
+conf.mat( predict_random_forest, actual_test )  
+conf.mat.plot( predict_random_forest, actual_test )    
+
+( mse_random_forest = mse( predict_random_forest, actual_test ) )
+```
+
+## Evaluating kNN
+
+```{r}
+conf.mat( predict_knn, actual_test )  
+conf.mat.plot( predict_knn, actual_test )    
+
+( mse_knn = mse( predict_knn, actual_test ) )
+```
+
+## Evaluating Logistic Regression
+
+```{r}
+predict_logreg = predict( logreg_2, test_set, type = "response" )
+
+( mse_logreg = mse( predict_logreg, actual_test ) )
+```
+
+## ROC and AUC comparision
+
+```{r}
+prob_cart = predict( tree_cart, test_set, type = "prob" )[ , 1 ]
+
+prob_random_forest = predict( random_forest, test_set, type = "prob" )[ , 1 ]
+
+prob_knn = kNN( formula, train = train_set, test = test_set, transform = "minmax", k = 13, type = "prob" )[ , 1 ]
+
+prob_logreg  = predict( logreg_2,  test_set, type = "response" )
+
+roc_knn = roc( actual_test, prob_knn )
+roc_cart = roc( actual_test, prob_cart )
+roc_random_forest = roc( actual_test, prob_random_forest )
+roc_logreg = roc( actual_test, prob_logreg )
+
+ggroc( list( roc_knn, roc_cart, roc_random_forest, roc_logreg ), size = 0.8 ) + 
+    theme_minimal() + ggtitle( "ROC plots with AUC for 4 outcomes") +
+  scale_color_manual( values = 1:4, 
+    labels = c( paste( "KNN; AUC=", round( auc( roc_knn ), 3 ) ),
+                paste( "CART; AUC=", round( auc( roc_cart ), 3 ) ),
+                paste( "Random Forest; AUC=", round( auc( roc_random_forest ), 3 ) ),
+                paste( "Log Reg; AUC=", round( auc( roc_logreg ), 3 ) )
+                ) ) +
+  theme( legend.title = element_blank() ) +
+  theme( legend.position = c( .7, .3 ), text = element_text( size = 17 ) )
+```
+
+# Conclusion
+
+**Random Forest and Logistic Regression were the best models.** Random Forest has the lowest MSE but Logistic regression has the highest AUC. Keeping in mind that the ntree = 100 was arbitrarily chosen for Random Forest algorithm, with a more optimal ntree it can perform much better.
+
+In conclusion, the successful completion of this project marks a significant milestone in leveraging machine learning techniques to enhance the car insurance industry. Through the application of various classification models and feature engineering, we have been able to predict with a high degree of accuracy whether a customer is likely to file a car insurance claim. This achievement holds immense potential for insurance companies seeking to optimize their operations, allocate resources more efficiently, and ultimately provide better services to their clients.
+
+The comprehensive evaluation of multiple classification models, including but not limited to Logistic Regression, Random Forest, K Nearest Neigbours and CART decision tree, enabled us to make informed decisions about the best-performing algorithm for our specific use case. The meticulous tuning of hyper-parameters and thorough model comparison allowed us to attain a robust predictive capability.
+
+Furthermore, this project provided valuable insights into the features that contribute most significantly to the prediction of insurance claims. This not only aids in understanding the underlying factors that drive customer behavior but also offers actionable intelligence for insurance companies to proactively engage with their clients and implement risk mitigation strategies.
+
+All in all, this project has demonstrated the immense value that machine learning brings to the realm of car insurance prediction. By harnessing the power of data and advanced analytical techniques, we have laid the foundation for more informed decision-making, improved customer service, and ultimately, a more sustainable and competitive insurance industry.

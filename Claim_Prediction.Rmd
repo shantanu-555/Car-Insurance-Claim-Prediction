@@ -1,12 +1,14 @@
 ---
-title: "<center> Advanced Analytics and Machine Learning for Car Insurance Claim Prediction <center>"
-author: '<center> Shantanu Motiani <center>'
-date: '<center> `r Sys.Date()` <center>'
+title: "<center> Advanced Analytics and Machine Learning for Car Insurance Claim Prediction <center>""
+author: "<center> Shantanu Motiani <center>"
+date: "<center> `r Sys.Date()` <center>"
 output:
+  pdf_document:
+    toc: yes
   html_document:
-    number_sections: true
-    fig_caption: true
-    toc: true
+    number_sections: yes
+    fig_caption: yes
+    toc: yes
     fig_width: 7
     fig_height: 5
     theme: cosmo
@@ -93,7 +95,7 @@ str(insurance)
 ```
 
 | Variable            | Type                   | Description                                    |
-|------------------|------------------|-----------------------------------|
+|-------------------|-------------------|-----------------------------------|
 | ID                  | Categorical (nominal)  | ID of the client                               |
 | AGE                 | Categorical (ordinal)  | Age range                                      |
 | GENDER              | Categorical (binary)   | Male or Female                                 |
